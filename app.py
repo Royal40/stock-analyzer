@@ -16,69 +16,65 @@ def analyze():
     ticker = request.form['ticker'].upper()
 
     try:
-        # Download 6 months of daily stock data
+        # Fetch historical data
         data = yf.download(ticker, period='6mo', interval='1d')
-
         if data.empty:
-            return jsonify({'error': 'Invalid ticker or no data available'})
+            return jsonify({'error': 'Invalid ticker or no data found.'})
 
-        # Use 1D Series — this is CRITICAL
-        close_prices = data['Close']
+        # Use only 1D Series
+        close = data['Close']
+        high = data['High']
+        low = data['Low']
+        open_ = data['Open']
 
-        # Moving Averages
-        data['MA50'] = close_prices.rolling(window=50).mean()
-        data['MA200'] = close_prices.rolling(window=200).mean()
+        # Technical Indicators (1D safe)
+        data['MA50'] = close.rolling(window=50).mean()
+        data['MA200'] = close.rolling(window=200).mean()
 
-        # RSI
-        rsi_indicator = RSIIndicator(close=close_prices)
-        data['RSI'] = rsi_indicator.rsi()
+        data['RSI'] = RSIIndicator(close=close).rsi()
 
-        # Bollinger Bands
-        bb_indicator = BollingerBands(close=close_prices)
-        data['bb_upper'] = bb_indicator.bollinger_hband()
-        data['bb_lower'] = bb_indicator.bollinger_lband()
+        bb = BollingerBands(close=close)
+        data['bb_upper'] = bb.bollinger_hband()
+        data['bb_lower'] = bb.bollinger_lband()
 
-        # MACD
-        macd_indicator = MACD(close=close_prices)
-        data['macd'] = macd_indicator.macd()
-        data['macd_signal'] = macd_indicator.macd_signal()
+        macd = MACD(close=close)
+        data['macd'] = macd.macd()
+        data['macd_signal'] = macd.macd_signal()
 
-        # Drop rows with any NaNs caused by indicators
+        # Drop rows with NaNs
         data.dropna(inplace=True)
 
-        # Get latest row
+        # Latest row
         latest = data.iloc[-1]
         price = round(latest['Close'], 2)
         ma50 = round(latest['MA50'], 2)
         ma200 = round(latest['MA200'], 2)
-        rsi_val = round(latest['RSI'], 2)
+        rsi = round(latest['RSI'], 2)
 
-        # Basic recommendation logic
-        if price > ma50 > ma200 and rsi_val < 70:
+        # Simple recommendation logic
+        if price > ma50 > ma200 and rsi < 70:
             recommendation = 'Buy'
-        elif price < ma50 < ma200 and rsi_val > 30:
+        elif price < ma50 < ma200 and rsi > 30:
             recommendation = 'Sell'
         else:
             recommendation = 'Hold'
 
-        # Prepare JSON response for frontend
+        # Prepare JSON output
         result = {
             'price': price,
             'ma50': ma50,
             'ma200': ma200,
-            'rsi': rsi_val,
+            'rsi': rsi,
             'recommendation': recommendation,
-
             'ohlc': {
                 'dates': data.index.strftime('%Y-%m-%d').tolist(),
-                'open': data['Open'].round(2).tolist(),
-                'high': data['High'].round(2).tolist(),
-                'low': data['Low'].round(2).tolist(),
-                'close': data['Close'].round(2).tolist(),
+                'open': open_.loc[data.index].round(2).tolist(),
+                'high': high.loc[data.index].round(2).tolist(),
+                'low': low.loc[data.index].round(2).tolist(),
+                'close': close.loc[data.index].round(2).tolist(),
                 'bb_upper': data['bb_upper'].round(2).tolist(),
                 'bb_lower': data['bb_lower'].round(2).tolist()
             },
-
             'macd': {
                 'dates': data.index.strftime('%Y-%m-%d').tolist(),
                 'macd': data['macd'].round(2).tolist(),
