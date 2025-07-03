@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stock Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Stock Technical Analyzer</h1>
+        <form id="tickerForm">
+            <input type="text" name="ticker" placeholder="Enter stock ticker (e.g., AAPL)" required>
+            <button type="submit">Analyze</button>
+        </form>
+
+        <div id="result"></div>
+
+        <div id="chart" style="margin-top: 30px;"></div>
+        <div id="bb-chart" style="margin-top: 30px;"></div>
+        <div id="macd-chart" style="margin-top: 30px;"></div>
+    </div>
+
+    <script>
+        document.getElementById('tickerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const ticker = formData.get('ticker').toUpperCase();
+
+            fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('result').innerHTML = `<p style="color:red">${data.error}</p>`;
+                    return;
+                }
+
+                // Display stats
+                document.getElementById('result').innerHTML = `
+                    <h3>Results for ${ticker}</h3>
+                    <p><strong>Current Price:</strong> $${data.price}</p>
+                    <p><strong>50-day MA:</strong> $${data.ma50}</p>
+                    <p><strong>200-day MA:</strong> $${data.ma200}</p>
+                    <p><strong>RSI:</strong> ${data.rsi}</p>
+                    <p><strong>Recommendation:</strong> ${data.recommendation}</p>
+                `;
+
+                // Candlestick chart
+                const ohlc = data.ohlc;
+                const candleTrace = {
+                    x: ohlc.dates,
+                    open: ohlc.open,
+                    high: ohlc.high,
+                    low: ohlc.low,
+                    close: ohlc.close,
+                    type: 'candlestick',
+                    name: 'OHLC',
+                };
+
+                Plotly.newPlot('chart', [candleTrace], {
+                    title: `${ticker} Candlestick Chart`,
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'Price ($)' }
+                });
+
+                // Bollinger Bands chart
+                const bb_upper = {
+                    x: ohlc.dates,
+                    y: ohlc.bb_upper,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Upper Band',
+                    line: { color: 'green', dash: 'dot' }
+                };
+
+                const bb_lower = {
+                    x: ohlc.dates,
+                    y: ohlc.bb_lower,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Lower Band',
+                    line: { color: 'red', dash: 'dot' }
+                };
+
+                const close = {
+                    x: ohlc.dates,
+                    y: ohlc.close,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Close Price',
+                    line: { color: 'blue' }
+                };
+
+                Plotly.newPlot('bb-chart', [close, bb_upper, bb_lower], {
+                    title: `${ticker} Bollinger Bands`,
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'Price ($)' }
+                });
+
+                // MACD chart
+                const macd = data.macd;
+                const macdLine = {
+                    x: macd.dates,
+                    y: macd.macd,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'MACD',
+                    line: { color: 'purple' }
+                };
+
+                const signalLine = {
+                    x: macd.dates,
+                    y: macd.signal,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Signal Line',
+                    line: { color: 'orange' }
+                };
+
+                Plotly.newPlot('macd-chart', [macdLine, signalLine], {
+                    title: `${ticker} MACD`,
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'MACD Value' }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
