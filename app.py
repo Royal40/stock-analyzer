@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, jsonify
 import yfinance as yf
 import pandas as pd
 from ta.momentum import RSIIndicator
+from ta.trend import MACD
+from ta.volatility import BollingerBands
 
 app = Flask(__name__)
 
@@ -14,44 +16,58 @@ def analyze():
     ticker = request.form['ticker'].upper()
 
     try:
-        # Download historical data
         df = yf.download(ticker, period='6mo', interval='1d')
 
         if df.empty:
-            return jsonify({'error': 'No data found for this ticker'})
+            return jsonify({'error': 'Invalid ticker or no data'})
 
-        # ✅ Use ONLY Series — never DataFrame
-        close = df['Close']  # This is a Series with shape (n,)
+        # ✅ Gracefully handle both 1D and 2D inputs
+        close = df['Close']
+        if isinstance(close, pd.DataFrame):
+            close = close.squeeze()
 
-        # ✅ Confirm 1D
-        print("DEBUG shape =", close.shape)
-        print("DEBUG type =", type(close))
-
-        # Calculate RSI
+        # Indicators
         df['RSI'] = RSIIndicator(close=close).rsi()
+        df['MA50'] = close.rolling(window=50).mean()
+        df['MA200'] = close.rolling(window=200).mean()
 
-        # Drop NaN rows from early RSI calc
+        bb = BollingerBands(close=close)
+        df['bb_upper'] = bb.bollinger_hband()
+        df['bb_lower'] = bb.bollinger_lband()
+
+        macd = MACD(close=close)
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+
         df.dropna(inplace=True)
 
-        # Get latest values
         latest = df.iloc[-1]
-        rsi_val = round(latest['RSI'], 2)
         price = round(latest['Close'], 2)
+        rsi = round(latest['RSI'], 2)
+        ma50 = round(latest['MA50'], 2)
+        ma200 = round(latest['MA200'], 2)
 
-        # Simple recommendation
-        if rsi_val < 30:
-            recommendation = 'Buy (RSI < 30 — Oversold)'
-        elif rsi_val > 70:
-            recommendation = 'Sell (RSI > 70 — Overbought)'
+        if rsi < 30:
+            recommendation = "Buy (Oversold)"
+        elif rsi > 70:
+            recommendation = "Sell (Overbought)"
         else:
-            recommendation = 'Hold (Neutral RSI)'
+            recommendation = "Hold"
 
         return jsonify({
+            'ticker': ticker,
             'price': price,
-            'rsi': rsi_val,
+            'rsi': rsi,
+            'ma50': ma50,
+            'ma200': ma200,
             'recommendation': recommendation,
             'dates': df.index.strftime('%Y-%m-%d').tolist(),
-            'rsi_series': df['RSI'].round(2).tolist()
+            'close': close.loc[df.index].round(2).tolist(),
+            'rsi_series': df['RSI'].round(2).tolist(),
+            'bb_upper': df['bb_upper'].round(2).tolist(),
+            'bb_lower': df['bb_lower'].round(2).tolist(),
+            'macd': df['macd'].round(2).tolist(),
+            'macd_signal': df['macd_signal'].round(2).tolist()
         })
 
     except Exception as e:
