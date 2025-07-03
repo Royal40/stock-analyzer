@@ -22,26 +22,27 @@ def analyze():
         if data.empty:
             return jsonify({'error': 'Invalid ticker or no data available'})
 
-        # Use 1D series
-        close_prices = data['Close']
+        # Use only 1D Series (very important!)
+close_prices = data['Close']  # NOT data[['Close']]!
 
-        # Moving Averages
-        data['MA50'] = close_prices.rolling(window=50).mean()
-        data['MA200'] = close_prices.rolling(window=200).mean()
+# 50-day and 200-day Moving Averages
+data['MA50'] = close_prices.rolling(window=50).mean()
+data['MA200'] = close_prices.rolling(window=200).mean()
 
-        # RSI
-        rsi_indicator = RSIIndicator(close=close_prices)
-        data['RSI'] = rsi_indicator.rsi()
+# RSI
+rsi_indicator = RSIIndicator(close=close_prices)
+data['RSI'] = rsi_indicator.rsi()
 
-        # Bollinger Bands
-        bb = BollingerBands(close=close_prices)
-        data['bb_upper'] = bb.bollinger_hband()
-        data['bb_lower'] = bb.bollinger_lband()
+# Bollinger Bands
+bb_indicator = BollingerBands(close=close_prices)
+data['bb_upper'] = bb_indicator.bollinger_hband()
+data['bb_lower'] = bb_indicator.bollinger_lband()
 
-        # MACD
-        macd = MACD(close=close_prices)
-        data['macd'] = macd.macd()
-        data['macd_signal'] = macd.macd_signal()
+# MACD
+macd_indicator = MACD(close=close_prices)
+data['macd'] = macd_indicator.macd()
+data['macd_signal'] = macd_indicator.macd_signal()
+
 
         # Drop any rows with NaNs
         data.dropna(inplace=True)
