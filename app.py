@@ -16,42 +16,41 @@ def analyze():
     ticker = request.form['ticker'].upper()
 
     try:
-        # Fetch historical data
-        data = yf.download(ticker, period='6mo', interval='1d')
-        if data.empty:
-            return jsonify({'error': 'Invalid ticker or no data found.'})
+        # Download data
+        df = yf.download(ticker, period='6mo', interval='1d')
+
+        if df.empty:
+            return jsonify({'error': 'Invalid ticker symbol or no data found.'})
 
         # Use only 1D Series
-        close = data['Close']
-        high = data['High']
-        low = data['Low']
-        open_ = data['Open']
+        open_ = df['Open']
+        high = df['High']
+        low = df['Low']
+        close = df['Close']
 
-        # Technical Indicators (1D safe)
-        data['MA50'] = close.rolling(window=50).mean()
-        data['MA200'] = close.rolling(window=200).mean()
-
-        data['RSI'] = RSIIndicator(close=close).rsi()
+        # Indicators (all passed 1D Series only)
+        df['MA50'] = close.rolling(window=50).mean()
+        df['MA200'] = close.rolling(window=200).mean()
+        df['RSI'] = RSIIndicator(close=close).rsi()
 
         bb = BollingerBands(close=close)
-        data['bb_upper'] = bb.bollinger_hband()
-        data['bb_lower'] = bb.bollinger_lband()
+        df['bb_upper'] = bb.bollinger_hband()
+        df['bb_lower'] = bb.bollinger_lband()
 
         macd = MACD(close=close)
-        data['macd'] = macd.macd()
-        data['macd_signal'] = macd.macd_signal()
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
 
-        # Drop rows with NaNs
-        data.dropna(inplace=True)
+        df.dropna(inplace=True)
 
-        # Latest row
-        latest = data.iloc[-1]
+        # Latest data point
+        latest = df.iloc[-1]
         price = round(latest['Close'], 2)
         ma50 = round(latest['MA50'], 2)
         ma200 = round(latest['MA200'], 2)
         rsi = round(latest['RSI'], 2)
 
-        # Simple recommendation logic
+        # Recommendation
         if price > ma50 > ma200 and rsi < 70:
             recommendation = 'Buy'
         elif price < ma50 < ma200 and rsi > 30:
@@ -59,7 +58,7 @@ def analyze():
         else:
             recommendation = 'Hold'
 
-        # Prepare JSON output
+        # JSON response
         result = {
             'price': price,
             'ma50': ma50,
@@ -67,18 +66,18 @@ def analyze():
             'rsi': rsi,
             'recommendation': recommendation,
             'ohlc': {
-                'dates': data.index.strftime('%Y-%m-%d').tolist(),
-                'open': open_.loc[data.index].round(2).tolist(),
-                'high': high.loc[data.index].round(2).tolist(),
-                'low': low.loc[data.index].round(2).tolist(),
-                'close': close.loc[data.index].round(2).tolist(),
-                'bb_upper': data['bb_upper'].round(2).tolist(),
-                'bb_lower': data['bb_lower'].round(2).tolist()
+                'dates': df.index.strftime('%Y-%m-%d').tolist(),
+                'open': open_.loc[df.index].round(2).tolist(),
+                'high': high.loc[df.index].round(2).tolist(),
+                'low': low.loc[df.index].round(2).tolist(),
+                'close': close.loc[df.index].round(2).tolist(),
+                'bb_upper': df['bb_upper'].round(2).tolist(),
+                'bb_lower': df['bb_lower'].round(2).tolist()
             },
             'macd': {
-                'dates': data.index.strftime('%Y-%m-%d').tolist(),
-                'macd': data['macd'].round(2).tolist(),
-                'signal': data['macd_signal'].round(2).tolist()
+                'dates': df.index.strftime('%Y-%m-%d').tolist(),
+                'macd': df['macd'].round(2).tolist(),
+                'signal': df['macd_signal'].round(2).tolist()
             }
         }
 
@@ -89,3 +88,4 @@ def analyze():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
