@@ -14,45 +14,45 @@ def analyze():
     ticker = request.form['ticker'].upper()
 
     try:
-        # Download last 6 months of data
+        # Download historical data
         df = yf.download(ticker, period='6mo', interval='1d')
+
         if df.empty:
             return jsonify({'error': 'No data found for this ticker'})
 
-        # Use 1D Series only
-        close = df['Close']
-        print("DEBUG: close shape =", close.shape)  # confirm it's (n,)
+        # ✅ Use ONLY Series — never DataFrame
+        close = df['Close']  # This is a Series with shape (n,)
+
+        # ✅ Confirm 1D
+        print("DEBUG shape =", close.shape)
+        print("DEBUG type =", type(close))
 
         # Calculate RSI
-        rsi = RSIIndicator(close=close).rsi()
-        df['RSI'] = rsi
+        df['RSI'] = RSIIndicator(close=close).rsi()
 
-        # Drop NaNs from RSI
+        # Drop NaN rows from early RSI calc
         df.dropna(inplace=True)
 
-        # Get latest RSI and close price
+        # Get latest values
         latest = df.iloc[-1]
         rsi_val = round(latest['RSI'], 2)
         price = round(latest['Close'], 2)
 
-        # Recommendation based on RSI
+        # Simple recommendation
         if rsi_val < 30:
-            recommendation = "Buy (RSI < 30 — Oversold)"
+            recommendation = 'Buy (RSI < 30 — Oversold)'
         elif rsi_val > 70:
-            recommendation = "Sell (RSI > 70 — Overbought)"
+            recommendation = 'Sell (RSI > 70 — Overbought)'
         else:
-            recommendation = "Hold (Neutral RSI)"
+            recommendation = 'Hold (Neutral RSI)'
 
-        # Send data to frontend
-        result = {
+        return jsonify({
             'price': price,
             'rsi': rsi_val,
             'recommendation': recommendation,
             'dates': df.index.strftime('%Y-%m-%d').tolist(),
             'rsi_series': df['RSI'].round(2).tolist()
-        }
-
-        return jsonify(result)
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)})
