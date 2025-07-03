@@ -16,45 +16,44 @@ def analyze():
     ticker = request.form['ticker'].upper()
 
     try:
-        # Download 6 months of daily data
+        # Download 6 months of daily stock data
         data = yf.download(ticker, period='6mo', interval='1d')
 
         if data.empty:
             return jsonify({'error': 'Invalid ticker or no data available'})
 
-        # Use only 1D Series (very important!)
-close_prices = data['Close']  # NOT data[['Close']]!
+        # Use 1D Series — this is CRITICAL
+        close_prices = data['Close']
 
-# 50-day and 200-day Moving Averages
-data['MA50'] = close_prices.rolling(window=50).mean()
-data['MA200'] = close_prices.rolling(window=200).mean()
+        # Moving Averages
+        data['MA50'] = close_prices.rolling(window=50).mean()
+        data['MA200'] = close_prices.rolling(window=200).mean()
 
-# RSI
-rsi_indicator = RSIIndicator(close=close_prices)
-data['RSI'] = rsi_indicator.rsi()
+        # RSI
+        rsi_indicator = RSIIndicator(close=close_prices)
+        data['RSI'] = rsi_indicator.rsi()
 
-# Bollinger Bands
-bb_indicator = BollingerBands(close=close_prices)
-data['bb_upper'] = bb_indicator.bollinger_hband()
-data['bb_lower'] = bb_indicator.bollinger_lband()
+        # Bollinger Bands
+        bb_indicator = BollingerBands(close=close_prices)
+        data['bb_upper'] = bb_indicator.bollinger_hband()
+        data['bb_lower'] = bb_indicator.bollinger_lband()
 
-# MACD
-macd_indicator = MACD(close=close_prices)
-data['macd'] = macd_indicator.macd()
-data['macd_signal'] = macd_indicator.macd_signal()
+        # MACD
+        macd_indicator = MACD(close=close_prices)
+        data['macd'] = macd_indicator.macd()
+        data['macd_signal'] = macd_indicator.macd_signal()
 
-
-        # Drop any rows with NaNs
+        # Drop rows with any NaNs caused by indicators
         data.dropna(inplace=True)
 
-        # Get latest values
+        # Get latest row
         latest = data.iloc[-1]
         price = round(latest['Close'], 2)
         ma50 = round(latest['MA50'], 2)
         ma200 = round(latest['MA200'], 2)
         rsi_val = round(latest['RSI'], 2)
 
-        # Recommendation logic
+        # Basic recommendation logic
         if price > ma50 > ma200 and rsi_val < 70:
             recommendation = 'Buy'
         elif price < ma50 < ma200 and rsi_val > 30:
@@ -62,7 +61,7 @@ data['macd_signal'] = macd_indicator.macd_signal()
         else:
             recommendation = 'Hold'
 
-        # Prepare JSON response
+        # Prepare JSON response for frontend
         result = {
             'price': price,
             'ma50': ma50,
