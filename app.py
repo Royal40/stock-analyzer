@@ -1,8 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import yfinance as yf
 import pandas as pd
-import ta
-
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 from ta.volatility import BollingerBands
@@ -24,33 +22,38 @@ def analyze():
         if data.empty:
             return jsonify({'error': 'Invalid ticker or no data available'})
 
-        # Add indicators
-        data['MA50'] = data['Close'].rolling(window=50).mean()
-        data['MA200'] = data['Close'].rolling(window=200).mean()
+        # Use 1D series
+        close_prices = data['Close']
+
+        # Moving Averages
+        data['MA50'] = close_prices.rolling(window=50).mean()
+        data['MA200'] = close_prices.rolling(window=200).mean()
 
         # RSI
-        rsi = RSIIndicator(data['Close']).rsi()
-        data['RSI'] = rsi
+        rsi_indicator = RSIIndicator(close=close_prices)
+        data['RSI'] = rsi_indicator.rsi()
 
         # Bollinger Bands
-        bb = BollingerBands(close=data['Close'])
+        bb = BollingerBands(close=close_prices)
         data['bb_upper'] = bb.bollinger_hband()
         data['bb_lower'] = bb.bollinger_lband()
 
         # MACD
-        macd = MACD(data['Close'])
+        macd = MACD(close=close_prices)
         data['macd'] = macd.macd()
         data['macd_signal'] = macd.macd_signal()
 
-        # Latest values
-        latest = data.dropna().iloc[-1]
+        # Drop any rows with NaNs
+        data.dropna(inplace=True)
 
-        # Simple logic for recommendation
-        price = latest['Close']
-        ma50 = latest['MA50']
-        ma200 = latest['MA200']
-        rsi_val = latest['RSI']
+        # Get latest values
+        latest = data.iloc[-1]
+        price = round(latest['Close'], 2)
+        ma50 = round(latest['MA50'], 2)
+        ma200 = round(latest['MA200'], 2)
+        rsi_val = round(latest['RSI'], 2)
 
+        # Recommendation logic
         if price > ma50 > ma200 and rsi_val < 70:
             recommendation = 'Buy'
         elif price < ma50 < ma200 and rsi_val > 30:
@@ -58,12 +61,12 @@ def analyze():
         else:
             recommendation = 'Hold'
 
-        # Build JSON response
+        # Prepare JSON response
         result = {
-            'price': round(price, 2),
-            'ma50': round(ma50, 2),
-            'ma200': round(ma200, 2),
-            'rsi': round(rsi_val, 2),
+            'price': price,
+            'ma50': ma50,
+            'ma200': ma200,
+            'rsi': rsi_val,
             'recommendation': recommendation,
 
             'ohlc': {
@@ -77,9 +80,9 @@ def analyze():
             },
 
             'macd': {
-                'dates': data['macd'].dropna().index.strftime('%Y-%m-%d').tolist(),
-                'macd': data['macd'].dropna().round(2).tolist(),
-                'signal': data['macd_signal'].dropna().round(2).tolist()
+                'dates': data.index.strftime('%Y-%m-%d').tolist(),
+                'macd': data['macd'].round(2).tolist(),
+                'signal': data['macd_signal'].round(2).tolist()
             }
         }
 
